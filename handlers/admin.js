@@ -1,57 +1,115 @@
-import { getBlock, getAdjacentBlocks } from "../utils/blocks.js";
-import { createKeyboard } from "../utils/keyboard.js";
-import { hasUserPassedTest } from "../utils/progress.js";
-import { getTest } from "../utils/blocks.js";
+import {
+  getMaxBlockId,
+  updateBlockKeyboard,
+  insertBlock,
+  insertTest,
+  updateBlockText,
+  checkBlockExists,
+  getAllBlocks,
+} from "../utils/blocks.js";
 
-export async function showBlock(ctx, blockId) {
-  try {
-    const block = getBlock(blockId);
-    if (!block) {
-      await ctx.reply("Блок не найден.");
-      return;
-    }
-
-    ctx.session.currentBlock = blockId;
-
-    if (
-      block.type === "test" &&
-      !hasUserPassedTest(ctx.from.id, blockId, ctx.session)
-    ) {
-      const test = getTest(blockId);
-      if (!test) {
-        await ctx.reply("❌ Ошибка: тест не найден");
-        return;
-      }
-
-      const message = `📝 Тест:\n${test.question}\n\nВыберите правильный ответ:`;
-      await ctx.reply(message, createKeyboard(block, ctx.from.id, blockId));
-      return;
-    }
-
-    await ctx.reply(block.text, createKeyboard(block, ctx.from.id, blockId));
-  } catch (error) {
-    console.error("Error in showBlock:", error);
-    await ctx.reply("❌ Произошла ошибка при загрузке блока.");
+export function handleAdminList(ctx) {
+  if (!ctx.isAdmin) {
+    return ctx.reply("❌ Доступ запрещен");
   }
+
+  const rows = getAllBlocks();
+  if (rows.length === 0) {
+    return ctx.reply("📭 Блоков нет. Используйте /admin_add_first");
+  }
+
+  let message = "📋 Список блоков:\n\n";
+  rows.forEach((block) => {
+    const typeIcon = block.type === "test" ? "🧪" : "📄";
+    message += `${typeIcon} ${block.id}: ${block.text.substring(0, 30)}... [${
+      block.keyboard_type
+    }]\n`;
+  });
+
+  ctx.reply(message);
 }
 
-export function handleStart(ctx) {
-  ctx.session.currentBlock = 0;
-  showBlock(ctx, 0);
+export function handleAdminAddFirst(ctx) {
+  if (!ctx.isAdmin) {
+    return ctx.reply("❌ Доступ запрещен");
+  }
+
+  const existing = checkBlockExists(0);
+  if (existing) {
+    return ctx.reply("❌ Первый блок уже существует!");
+  }
+
+  insertBlock(0, "content", "Привет друг! Начнем путешествие?", "first");
+  ctx.reply("✅ Первый блок добавлен!");
 }
 
-export function handleNext(ctx) {
-  ctx.deleteMessage().catch(() => {});
-  const adjacent = getAdjacentBlocks(ctx.session.currentBlock);
-  if (adjacent.next !== null) {
-    showBlock(ctx, adjacent.next);
+export function handleAdminAddContent(ctx) {
+  if (!ctx.isAdmin) {
+    return ctx.reply("❌ Доступ запрещен");
   }
+
+  const row = getMaxBlockId();
+  const newId = row.maxId !== null ? row.maxId + 1 : 0;
+  const text = `Это блок знаний ${newId + 1}`;
+
+  if (row.maxId !== null) {
+    updateBlockKeyboard(row.maxId);
+  }
+
+  const keyboardType = newId === 0 ? "first" : "last";
+  insertBlock(newId, "content", text, keyboardType);
+  ctx.reply(`✅ Добавлен контент-блок ${newId}!`);
 }
 
-export function handleBack(ctx) {
-  ctx.deleteMessage().catch(() => {});
-  const adjacent = getAdjacentBlocks(ctx.session.currentBlock);
-  if (adjacent.prev !== null) {
-    showBlock(ctx, adjacent.prev);
+export function handleAdminAddTest(ctx) {
+  if (!ctx.isAdmin) {
+    return ctx.reply("❌ Доступ запрещен");
   }
+
+  const args = ctx.message.text.split("|").map((arg) => arg.trim());
+  if (args.length < 4) {
+    return ctx.reply(
+      "Использование: /admin_add_test вопрос | правильный ответ | вариант1 | вариант2 | вариант3 ..."
+    );
+  }
+
+  const [question, correctAnswer, ...options] = args.slice(1);
+
+  if (!options.includes(correctAnswer)) {
+    return ctx.reply("❌ Правильный ответ должен быть среди вариантов!");
+  }
+
+  const row = getMaxBlockId();
+  const newId = row.maxId !== null ? row.maxId + 1 : 0;
+
+  if (row.maxId !== null) {
+    updateBlockKeyboard(row.maxId);
+  }
+
+  insertBlock(newId, "test", `Тест: ${question.substring(0, 50)}...`, "last");
+  insertTest(newId, question, correctAnswer, JSON.stringify(options));
+
+  ctx.reply(`✅ Добавлен тест-блок ${newId}!`);
+}
+
+export function handleAdminEdit(ctx) {
+  if (!ctx.isAdmin) {
+    return ctx.reply("❌ Доступ запрещен");
+  }
+
+  const args = ctx.message.text.split(" ").slice(1);
+  if (args.length < 2) {
+    return ctx.reply("Использование: /admin_edit [id] [текст]");
+  }
+
+  const blockId = parseInt(args[0]);
+  const text = args.slice(1).join(" ");
+
+  const existing = checkBlockExists(blockId);
+  if (!existing) {
+    return ctx.reply("❌ Блок не найден");
+  }
+
+  updateBlockText(blockId, text);
+  ctx.reply(`✅ Блок ${blockId} обновлен!`);
 }

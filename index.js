@@ -5,6 +5,7 @@ import { handleStart, handleNext, handleBack } from "./handlers/navigation.js";
 import { handleTestAnswer } from "./handlers/tests.js";
 import {
   handleAdminList,
+  handleAdminAddFirst,
   handleAdminAddContent,
   handleAdminAddTest,
   handleAdminEdit,
@@ -25,6 +26,7 @@ bot.use(errorHandler);
 
 // ==================== АДМИН-КОМАНДЫ ====================
 bot.command("admin_list", handleAdminList);
+bot.command("admin_add_first", handleAdminAddFirst);
 bot.command("admin_add_content", handleAdminAddContent);
 bot.command("admin_add_test", handleAdminAddTest);
 bot.command("admin_edit", handleAdminEdit);
